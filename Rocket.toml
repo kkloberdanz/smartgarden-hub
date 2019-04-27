@@ -4,3 +4,6 @@ port = 8080
 log = "debug"
 secret_key = "J4jQqhsu3rpnii0X9QuL+r9L6yIp6ZjkZuUJ6X8oeoU="
 limits = { forms = 32768 }
+
+[global.databases]
+sqlite_db = { url = "db.sqlite" }
