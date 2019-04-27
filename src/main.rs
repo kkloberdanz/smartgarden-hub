@@ -45,6 +45,29 @@ struct GardenData {
 }
 
 
+#[derive(Debug)]
+struct Forcast {
+    country: String,
+    city: String,
+    //time: ,
+    weather: String,
+    description: String,
+    temp: f64,
+    temp_min: f64,
+    temp_max: f64,
+    pressure: f64,
+    humidity: f64
+}
+
+
+#[derive(Debug)]
+struct SensorMeta {
+    sensor_id: SensorID,
+    country: String,
+    city: String
+}
+
+
 fn http_ok(msg: &String) -> String {
     format!("HTTP/1.1 200 OK \r\n\r\n{}\r\n", msg)
 }
@@ -55,8 +78,9 @@ fn http_bad_request(msg: &String) -> String {
 }
 
 
-fn get_latest_moisture(db_conn: &State<DbConn>, sensor_id: SensorID) -> i8 {
-    let sql = "select moisture_content \
+fn get_latest_garden_record(db_conn: &State<DbConn>,
+                            sensor_id: SensorID) -> rusqlite::Result<GardenData> {
+    let sql = "select sensor_id, moisture_content \
                from garden_data \
                where sensor_id = ?1 and \
                      time = (select max(time) \
@@ -66,23 +90,48 @@ fn get_latest_moisture(db_conn: &State<DbConn>, sensor_id: SensorID) -> i8 {
     db_conn
         .lock()
         .expect("db read lock")
-        .query_row(&sql, &params, |row| row.get(0))
-        .unwrap()
+        .query_row(&sql, &params, |row| Ok(
+                GardenData {
+                    sensor_id: row.get(0)?,
+                    moisture_content: row.get(1)?,
+                }))
 }
 
 
-fn should_water(db_conn: &State<DbConn>, sensor_id: SensorID) -> bool {
-    let moisture_content = get_latest_moisture(&db_conn, sensor_id);
-    moisture_content < 20
+/*
+fn get_last_weather_update() -> Forcast {
+}
+*/
+
+
+fn wont_rain_soon(db_conn: &State<DbConn>, sensor_id: SensorID) -> bool {
+    true
+}
+
+
+fn should_water(db_conn: &State<DbConn>, sensor_id: SensorID) -> Result<bool, String> {
+    let garden_record = get_latest_garden_record(&db_conn, sensor_id);
+    match garden_record {
+        Ok(v) => Ok((v.moisture_content < 20) && (wont_rain_soon(&db_conn, sensor_id))),
+        Err(e) => {
+            println!("error: {}", e);
+            Err(format!("sensor_id: {} does not exist", sensor_id))
+        }
+    }
 }
 
 
 #[get("/can-i-water/<sensor_id>")]
 fn can_i_water(db_conn: State<DbConn>, sensor_id: SensorID) -> String {
-    if should_water(&db_conn, sensor_id) {
-        http_ok(&String::from("yes"))
-    } else {
-        http_ok(&String::from("no"))
+    match should_water(&db_conn, sensor_id) {
+        Ok(b) => {
+            if b {
+                http_ok(&String::from("yes"))
+            } else {
+                http_ok(&String::from("no"))
+            }
+        }
+        Err(e) => http_bad_request(&e)
     }
 }
 
