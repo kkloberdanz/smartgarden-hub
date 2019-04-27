@@ -1,0 +1,2 @@
+# 5 day weather forcast
+curl  api.openweathermap.org/data/2.5/forecast?q=Urbandale,US -H "x-api-key: 2fdc482d5509bc0866f5b3824454044a"
