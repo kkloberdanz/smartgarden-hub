@@ -12,18 +12,18 @@
 use std::sync::Mutex;
 use rocket::{Rocket, State};
 use rocket_contrib::json::Json;
+use rusqlite::Connection;
 use rusqlite::types::ToSql;
-use rusqlite::{Connection, Error, Result, NO_PARAMS};
 
 
-type SensorID = u64;
+type SensorID = i64;
 type DbConn = Mutex<Connection>;
 
 
 #[derive(Serialize, Deserialize, Debug)]
 struct GardenData {
     sensor_id: SensorID,
-    moisture_content: u8
+    moisture_content: i8
 }
 
 
@@ -56,7 +56,7 @@ fn hello() -> String {
 
 #[post("/log", format="Application/json", data="<data>")]
 fn log(db_conn: State<DbConn>, data: Json<GardenData>) -> String {
-    if data.moisture_content > 100 {
+    if data.moisture_content > 100 || data.moisture_content < 0 {
         let msg = String::from(
             "moisture_content must be an integer between 0 to 100");
         http_bad_request(&msg)
@@ -64,6 +64,13 @@ fn log(db_conn: State<DbConn>, data: Json<GardenData>) -> String {
         let msg = format!(
             "sensor #{} has moister content {}", data.sensor_id,
                                                  data.moisture_content);
+        let sql = "insert into garden_data (sensor_id, moisture_content) \
+                   values(?1, ?2)";
+        let params = [&data.sensor_id as &ToSql, &data.moisture_content];
+        db_conn
+            .lock()
+            .expect("db conn lock")
+            .execute(&sql, &params).unwrap();
         http_ok(&msg)
     }
 }
