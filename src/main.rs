@@ -9,15 +9,15 @@
 #[cfg(test)] mod tests;
 
 
+use std::sync::Mutex;
+use rocket::{Rocket, State};
 use rocket_contrib::json::Json;
-use rocket_contrib::databases::diesel;
-
-
-#[database("sqlite_db")]
-struct DbConn(diesel::SqliteConnection);
+use rusqlite::types::ToSql;
+use rusqlite::{Connection, Error, Result, NO_PARAMS};
 
 
 type SensorID = u64;
+type DbConn = Mutex<Connection>;
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,7 +55,7 @@ fn hello() -> String {
 
 
 #[post("/log", format="Application/json", data="<data>")]
-fn log(conn: DbConn, data: Json<GardenData>) -> String {
+fn log(db_conn: State<DbConn>, data: Json<GardenData>) -> String {
     if data.moisture_content > 100 {
         let msg = String::from(
             "moisture_content must be an integer between 0 to 100");
@@ -69,9 +69,16 @@ fn log(conn: DbConn, data: Json<GardenData>) -> String {
 }
 
 
-fn main() {
+fn rocket() -> Rocket {
+    let conn = Connection::open("db.sqlite")
+        .expect("failed to open db.sqlite file");
+
     rocket::ignite()
+        .manage(Mutex::new(conn))
         .mount("/", routes![hello, log, can_i_water])
-        .attach(DbConn::fairing())
-        .launch();
+}
+
+
+fn main() {
+    rocket().launch();
 }
