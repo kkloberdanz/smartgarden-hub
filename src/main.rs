@@ -37,9 +37,31 @@ fn http_bad_request(msg: &String) -> String {
 }
 
 
+fn get_latest_moisture(db_conn: &State<DbConn>, sensor_id: SensorID) -> i8 {
+    let sql = "select moisture_content \
+               from garden_data \
+               where sensor_id = ?1 and \
+                     time = (select max(time) \
+                             from garden_data \
+                             where sensor_id = ?1)";
+    let params = [&sensor_id as &ToSql];
+    db_conn
+        .lock()
+        .expect("db read lock")
+        .query_row(&sql, &params, |row| row.get(0))
+        .unwrap()
+}
+
+
+fn should_water(db_conn: &State<DbConn>, sensor_id: SensorID) -> bool {
+    let moisture_content = get_latest_moisture(&db_conn, sensor_id);
+    moisture_content < 20
+}
+
+
 #[get("/can-i-water/<sensor_id>")]
-fn can_i_water(sensor_id: SensorID) -> String {
-    if true {
+fn can_i_water(db_conn: State<DbConn>, sensor_id: SensorID) -> String {
+    if should_water(&db_conn, sensor_id) {
         http_ok(&String::from("yes"))
     } else {
         http_ok(&String::from("no"))
