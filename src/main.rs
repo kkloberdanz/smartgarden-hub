@@ -22,6 +22,8 @@
 #[macro_use] extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
 #[macro_use] extern crate serde_derive;
+extern crate reqwest;
+extern crate serde_json;
 
 
 #[cfg(test)] mod tests;
@@ -32,6 +34,7 @@ use rocket::{Rocket, State};
 use rocket_contrib::json::Json;
 use rusqlite::Connection;
 use rusqlite::types::ToSql;
+use rocket::http::Method;
 
 
 type SensorID = i64;
@@ -46,10 +49,10 @@ struct GardenData {
 
 
 #[derive(Debug)]
-struct Forcast {
+struct Forecast {
     country: String,
     city: String,
-    //time: ,
+    time: String,
     weather: String,
     description: String,
     temp: f64,
@@ -98,8 +101,9 @@ fn get_latest_garden_record(db_conn: &State<DbConn>,
 }
 
 
+
 /*
-fn get_last_weather_update() -> Forcast {
+fn get_last_weather_update() -> Forecast {
 }
 */
 
@@ -118,6 +122,79 @@ fn should_water(db_conn: &State<DbConn>, sensor_id: SensorID) -> Result<bool, St
             Err(format!("sensor_id: {} does not exist", sensor_id))
         }
     }
+}
+
+
+fn just_unwrap_string(string: Option<&str>) -> String {
+    match string {
+        Some(s) => String::from(s),
+        None => String::from("")
+    }
+}
+
+
+fn just_unwrap_f64(myf: Option<f64>) -> f64 {
+    match myf {
+        Some(f) => f,
+        None => 0.0
+    }
+}
+
+
+//fn fetch_forecast(db_conn: &State<DbConn>) -> Result<Vec<Forecast>, String> {
+#[get("/forecast")]
+fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let url = "https://api.openweathermap.org/data/2.5/forecast?q=Urbandale,US";
+    let mut response = client.get(url)
+        .header("x-api-key", "2fdc482d5509bc0866f5b3824454044a")
+        .send()
+        .unwrap();
+    let json_data: serde_json::Value = response.json().unwrap();
+
+    let list = match &json_data["list"] {
+        serde_json::Value::Array(v) => v.to_vec(),
+        _ => panic!("weather API is broken")
+    };
+
+    let sql = "insert into forecast \
+               (country, city, time, weather, description, temp, temp_min, \
+                temp_max, pressure, humidity) \
+               values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
+    for event in list {
+        let forecast = Forecast {
+            country: String::from("US"),
+            city: String::from("Urbandale"),
+            time: just_unwrap_string(event["dt_txt"].as_str()),
+            weather: just_unwrap_string(event["weather"][0]["main"].as_str()),
+            description: just_unwrap_string(event["weather"][0]["description"].as_str()), 
+            temp: just_unwrap_f64(event["main"]["temp"].as_f64()),
+            temp_min: just_unwrap_f64(event["main"]["temp_min"].as_f64()),
+            temp_max: just_unwrap_f64(event["main"]["temp_max"].as_f64()),
+            pressure: just_unwrap_f64(event["main"]["pressure"].as_f64()),
+            humidity: just_unwrap_f64(event["main"]["humidity"].as_f64()) 
+        };
+        let params = [
+            &forecast.country as &ToSql,
+            &forecast.city,
+            &forecast.time,
+            &forecast.weather,
+            &forecast.description,
+            &forecast.temp,
+            &forecast.temp_min,
+            &forecast.temp_max,
+            &forecast.pressure,
+            &forecast.humidity,
+        ];
+        db_conn
+            .lock()
+            .expect("db conn lock inserting forecast")
+            .execute(&sql, &params).unwrap();
+        println!("{:?}", forecast);
+    }
+
+
+    Ok(format!("{:?}\n", "foobar"))
 }
 
 
@@ -171,7 +248,7 @@ fn rocket() -> Rocket {
 
     rocket::ignite()
         .manage(Mutex::new(conn))
-        .mount("/", routes![hello, log, can_i_water])
+        .mount("/", routes![hello, log, can_i_water, fetch_forecast])
 }
 
 
