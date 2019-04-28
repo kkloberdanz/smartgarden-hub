@@ -101,22 +101,18 @@ fn get_latest_garden_record(db_conn: &State<DbConn>,
 }
 
 
-
-/*
-fn get_last_weather_update() -> Forecast {
-}
-*/
-
-
-fn wont_rain_soon(db_conn: &State<DbConn>, sensor_id: SensorID) -> bool {
+fn wont_rain_soon(db_conn: &State<DbConn>,
+                  sensor_id: SensorID) -> bool {
     true
 }
 
 
-fn should_water(db_conn: &State<DbConn>, sensor_id: SensorID) -> Result<bool, String> {
+fn should_water(db_conn: &State<DbConn>,
+                sensor_id: SensorID) -> Result<bool, String> {
     let garden_record = get_latest_garden_record(&db_conn, sensor_id);
     match garden_record {
-        Ok(v) => Ok((v.moisture_content < 20) && (wont_rain_soon(&db_conn, sensor_id))),
+        Ok(v) => Ok((v.moisture_content < 20) &&
+                    (wont_rain_soon(&db_conn, sensor_id))),
         Err(e) => {
             println!("error: {}", e);
             Err(format!("sensor_id: {} does not exist", sensor_id))
@@ -145,7 +141,8 @@ fn just_unwrap_f64(myf: Option<f64>) -> f64 {
 #[get("/forecast")]
 fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
     let client = reqwest::Client::new();
-    let url = "https://api.openweathermap.org/data/2.5/forecast?q=Urbandale,US";
+    let url = "https://api.openweathermap.org\
+               /data/2.5/forecast?q=Urbandale,US";
     let mut response = client.get(url)
         .header("x-api-key", "2fdc482d5509bc0866f5b3824454044a")
         .send()
@@ -167,12 +164,13 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
             city: String::from("Urbandale"),
             time: just_unwrap_string(event["dt_txt"].as_str()),
             weather: just_unwrap_string(event["weather"][0]["main"].as_str()),
-            description: just_unwrap_string(event["weather"][0]["description"].as_str()), 
+            description: just_unwrap_string(
+                event["weather"][0]["description"].as_str()),
             temp: just_unwrap_f64(event["main"]["temp"].as_f64()),
             temp_min: just_unwrap_f64(event["main"]["temp_min"].as_f64()),
             temp_max: just_unwrap_f64(event["main"]["temp_max"].as_f64()),
             pressure: just_unwrap_f64(event["main"]["pressure"].as_f64()),
-            humidity: just_unwrap_f64(event["main"]["humidity"].as_f64()) 
+            humidity: just_unwrap_f64(event["main"]["humidity"].as_f64())
         };
         let params = [
             &forecast.country as &ToSql,
@@ -192,7 +190,6 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
             .execute(&sql, &params).unwrap();
         println!("{:?}", forecast);
     }
-
 
     Ok(format!("{:?}\n", "foobar"))
 }
