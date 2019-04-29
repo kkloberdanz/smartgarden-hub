@@ -121,22 +121,6 @@ fn should_water(db_conn: &State<DbConn>,
 }
 
 
-fn just_unwrap_string(string: Option<&str>) -> String {
-    match string {
-        Some(s) => String::from(s),
-        None => String::from("")
-    }
-}
-
-
-fn just_unwrap_f64(myf: Option<f64>) -> f64 {
-    match myf {
-        Some(f) => f,
-        None => 0.0
-    }
-}
-
-
 //fn fetch_forecast(db_conn: &State<DbConn>) -> Result<Vec<Forecast>, String> {
 #[get("/forecast")]
 fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
@@ -162,15 +146,14 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
         let forecast = Forecast {
             country: String::from("US"),
             city: String::from("Urbandale"),
-            time: just_unwrap_string(event["dt_txt"].as_str()),
-            weather: just_unwrap_string(event["weather"][0]["main"].as_str()),
-            description: just_unwrap_string(
-                event["weather"][0]["description"].as_str()),
-            temp: just_unwrap_f64(event["main"]["temp"].as_f64()),
-            temp_min: just_unwrap_f64(event["main"]["temp_min"].as_f64()),
-            temp_max: just_unwrap_f64(event["main"]["temp_max"].as_f64()),
-            pressure: just_unwrap_f64(event["main"]["pressure"].as_f64()),
-            humidity: just_unwrap_f64(event["main"]["humidity"].as_f64())
+            time: event["dt_txt"].as_str().unwrap().to_string(),
+            weather: event["weather"][0]["main"].as_str().unwrap().to_string(),
+            description: event["weather"][0]["description"].as_str().unwrap().to_string(),
+            temp: event["main"]["temp"].as_f64().unwrap(),
+            temp_min: event["main"]["temp_min"].as_f64().unwrap(),
+            temp_max: event["main"]["temp_max"].as_f64().unwrap(),
+            pressure: event["main"]["pressure"].as_f64().unwrap(),
+            humidity: event["main"]["humidity"].as_f64().unwrap()
         };
         let params = [
             &forecast.country as &ToSql,
@@ -187,7 +170,8 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
         db_conn
             .lock()
             .expect("db conn lock inserting forecast")
-            .execute(&sql, &params).unwrap();
+            .execute(&sql, &params)
+            .unwrap();
         println!("{:?}", forecast);
     }
 
