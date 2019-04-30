@@ -15,38 +15,29 @@
  *  along with SmartGarden.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 #![feature(proc_macro_hygiene, decl_macro)]
 
-
-#[macro_use] extern crate rocket;
-#[macro_use] extern crate rocket_contrib;
-#[macro_use] extern crate serde_derive;
+#[macro_use]
+extern crate rocket;
+#[macro_use]
+extern crate serde_derive;
 extern crate reqwest;
 extern crate serde_json;
 
-
-#[cfg(test)] mod tests;
-
-
-use std::sync::Mutex;
 use rocket::{Rocket, State};
 use rocket_contrib::json::Json;
-use rusqlite::Connection;
 use rusqlite::types::ToSql;
-use rocket::http::Method;
-
+use rusqlite::Connection;
+use std::sync::Mutex;
 
 type SensorID = i64;
 type DbConn = Mutex<Connection>;
 
-
 #[derive(Serialize, Deserialize, Debug)]
 struct GardenData {
     sensor_id: SensorID,
-    moisture_content: i8
+    moisture_content: i8,
 }
-
 
 #[derive(Debug)]
 struct Forecast {
@@ -59,61 +50,62 @@ struct Forecast {
     temp_min: f64,
     temp_max: f64,
     pressure: f64,
-    humidity: f64
+    humidity: f64,
 }
-
 
 #[derive(Debug)]
 struct SensorMeta {
     sensor_id: SensorID,
     country: String,
-    city: String
+    city: String,
 }
-
 
 fn http_ok(msg: &String) -> String {
     format!("HTTP/1.1 200 OK \r\n\r\n{}\r\n", msg)
 }
 
-
 fn http_bad_request(msg: &String) -> String {
     format!("HTTP/1.1 400 BAD REQUEST \r\n\r\n{}\r\n", msg)
 }
 
-
 fn get_latest_garden_record(
     db_conn: &State<DbConn>,
-    sensor_id: SensorID) -> rusqlite::Result<GardenData> {
+    sensor_id: SensorID,
+) -> rusqlite::Result<GardenData> {
     let sql = "select sensor_id, moisture_content \
                from garden_data \
                where sensor_id = ?1 and \
-                     time = (select max(time) \
-                             from garden_data \
-                             where sensor_id = ?1)";
+               time = (select max(time) \
+               from garden_data \
+               where sensor_id = ?1)";
     let params = [&sensor_id as &ToSql];
     db_conn
         .lock()
         .expect("db read lock")
-        .query_row(&sql, &params, |row| Ok(
-                GardenData {
-                    sensor_id: row.get(0)?,
-                    moisture_content: row.get(1)?,
-                }))
+        .query_row(&sql, &params, |row| {
+            Ok(GardenData {
+                sensor_id: row.get(0)?,
+                moisture_content: row.get(1)?,
+            })
+        })
 }
 
-
-fn wont_rain_soon(db_conn: &State<DbConn>,
-                  sensor_id: SensorID) -> bool {
+fn wont_rain_soon(db_conn: &State<DbConn>, sensor_id: SensorID) -> bool {
     true
 }
 
-
-fn should_water(db_conn: &State<DbConn>,
-                sensor_id: SensorID) -> Result<bool, String> {
+fn should_water(
+    db_conn: &State<DbConn>,
+    sensor_id: SensorID,
+) -> Result<bool, String> {
     let garden_record = get_latest_garden_record(&db_conn, sensor_id);
     match garden_record {
-        Ok(v) => Ok((v.moisture_content < 20) &&
-                    (wont_rain_soon(&db_conn, sensor_id))),
+        Ok(v) => {
+            let too_little_moisture = v.moisture_content < 20;
+            let no_rain = wont_rain_soon(&db_conn, sensor_id);
+            let should_water = too_little_moisture && no_rain;
+            Ok(should_water)
+        }
         Err(e) => {
             println!("error: {}", e);
             Err(format!("sensor_id: {} does not exist", sensor_id))
@@ -121,14 +113,14 @@ fn should_water(db_conn: &State<DbConn>,
     }
 }
 
-
 //fn fetch_forecast(db_conn: &State<DbConn>) -> Result<Vec<Forecast>, String> {
 #[get("/forecast")]
 fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
     let client = reqwest::Client::new();
     let url = "https://api.openweathermap.org\
                /data/2.5/forecast?q=Urbandale,US";
-    let mut response = client.get(url)
+    let mut response = client
+        .get(url)
         .header("x-api-key", "2fdc482d5509bc0866f5b3824454044a")
         .send()
         .unwrap();
@@ -136,44 +128,28 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
 
     let list = match &json_data["list"] {
         serde_json::Value::Array(v) => v.to_vec(),
-        _ => panic!("weather API is broken")
+        _ => panic!("weather API is broken"),
     };
 
     let sql = "insert into forecast \
                (country, city, time, weather, description, temp, temp_min, \
-                temp_max, pressure, humidity) \
+               temp_max, pressure, humidity) \
                values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
     for event in list {
         let forecast = Forecast {
             country: String::from("US"),
             city: String::from("Urbandale"),
-            time: event["dt_txt"]
-                .as_str()
-                .unwrap()
-                .to_string(),
-            weather: event["weather"][0]["main"]
-                .as_str()
-                .unwrap()
-                .to_string(),
+            time: event["dt_txt"].as_str().unwrap().to_string(),
+            weather: event["weather"][0]["main"].as_str().unwrap().to_string(),
             description: event["weather"][0]["description"]
                 .as_str()
                 .unwrap()
                 .to_string(),
-            temp: event["main"]["temp"]
-                .as_f64()
-                .unwrap(),
-            temp_min: event["main"]["temp_min"]
-                .as_f64()
-                .unwrap(),
-            temp_max: event["main"]["temp_max"]
-                .as_f64()
-                .unwrap(),
-            pressure: event["main"]["pressure"]
-                .as_f64()
-                .unwrap(),
-            humidity: event["main"]["humidity"]
-                .as_f64()
-                .unwrap()
+            temp: event["main"]["temp"].as_f64().unwrap(),
+            temp_min: event["main"]["temp_min"].as_f64().unwrap(),
+            temp_max: event["main"]["temp_max"].as_f64().unwrap(),
+            pressure: event["main"]["pressure"].as_f64().unwrap(),
+            humidity: event["main"]["humidity"].as_f64().unwrap(),
         };
         let params = [
             &forecast.country as &ToSql,
@@ -198,7 +174,6 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
     Ok(format!("{:?}\n", "foobar"))
 }
 
-
 #[get("/can-i-water/<sensor_id>")]
 fn can_i_water(db_conn: State<DbConn>, sensor_id: SensorID) -> String {
     match should_water(&db_conn, sensor_id) {
@@ -209,10 +184,9 @@ fn can_i_water(db_conn: State<DbConn>, sensor_id: SensorID) -> String {
                 http_ok(&String::from("no"))
             }
         }
-        Err(e) => http_bad_request(&e)
+        Err(e) => http_bad_request(&e),
     }
 }
-
 
 #[get("/")]
 fn hello() -> String {
@@ -220,38 +194,39 @@ fn hello() -> String {
     http_ok(&msg)
 }
 
-
-#[post("/log", format="Application/json", data="<data>")]
+#[post("/log", format = "Application/json", data = "<data>")]
 fn log(db_conn: State<DbConn>, data: Json<GardenData>) -> String {
     if data.moisture_content > 100 || data.moisture_content < 0 {
         let msg = String::from(
-            "moisture_content must be an integer between 0 to 100");
+            "moisture_content must be an \
+             integer between 0 to 100",
+        );
         http_bad_request(&msg)
     } else {
         let msg = format!(
-            "sensor #{} has moister content {}", data.sensor_id,
-                                                 data.moisture_content);
+            "sensor #{} has moister content {}",
+            data.sensor_id, data.moisture_content
+        );
         let sql = "insert into garden_data (sensor_id, moisture_content) \
                    values(?1, ?2)";
         let params = [&data.sensor_id as &ToSql, &data.moisture_content];
         db_conn
             .lock()
             .expect("db conn lock")
-            .execute(&sql, &params).unwrap();
+            .execute(&sql, &params)
+            .unwrap();
         http_ok(&msg)
     }
 }
 
-
 fn rocket() -> Rocket {
-    let conn = Connection::open("db.sqlite")
-        .expect("failed to open db.sqlite file");
+    let conn =
+        Connection::open("db.sqlite").expect("failed to open db.sqlite file");
 
     rocket::ignite()
         .manage(Mutex::new(conn))
         .mount("/", routes![hello, log, can_i_water, fetch_forecast])
 }
-
 
 fn main() {
     rocket().launch();
