@@ -1,2 +1,9 @@
 # 5 day weather forcast
 curl  api.openweathermap.org/data/2.5/forecast?q=Urbandale,US -H "x-api-key: 2fdc482d5509bc0866f5b3824454044a"
+
+# Check if forecast table needs refresh (i.e., last timeof >= 3 hours)
+#   if so, then refresh
+# Fetch latest forecast records
+# if moisture level is lower than threshold but above danger
+#   if it won't rain in the next 12 hours, then water
+# if moisture level is below danger level, then water

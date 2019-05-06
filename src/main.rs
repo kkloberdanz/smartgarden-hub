@@ -17,6 +17,8 @@
 
 #![feature(proc_macro_hygiene, decl_macro)]
 
+extern crate chrono;
+extern crate time;
 #[macro_use]
 extern crate rocket;
 #[macro_use]
@@ -24,6 +26,8 @@ extern crate serde_derive;
 extern crate reqwest;
 extern crate serde_json;
 
+use chrono::Local;
+use time::Duration;
 use rocket::{Rocket, State};
 use rocket_contrib::json::Json;
 use rusqlite::types::ToSql;
@@ -90,8 +94,24 @@ fn get_latest_garden_record(
         })
 }
 
-fn wont_rain_soon(db_conn: &State<DbConn>, sensor_id: SensorID) -> bool {
-    true
+fn wont_rain_soon(db_conn: &State<DbConn>, sensor_id: SensorID) -> rusqlite::Result<bool> {
+    let now = Local::now();
+    let twelve_hr_later = now + Duration::hours(12);
+    let now_string = format!("{}", now.format("%Y-%m-%d %H:%M:%S"));
+    let twelve_hr_later_string = format!("{}", twelve_hr_later.format("%Y-%m-%d %H:%M:%S"));
+    let sql = "select count(*) from forecast \
+               where timeof_forcast = (select max(timeof_forcast) from forecast) \
+               and time >= ?1 and time <= ?2 and lower(weather) like '%rain%'";
+
+    let params = [&now_string as &ToSql,
+                  &twelve_hr_later_string];
+    db_conn
+        .lock()
+        .expect("db read lock")
+        .query_row(&sql, &params, |row| {
+            let count: i32 = row.get(0)?;
+            Ok(count == 0)
+        })
 }
 
 fn should_water(
@@ -102,18 +122,31 @@ fn should_water(
     match garden_record {
         Ok(v) => {
             let too_little_moisture = v.moisture_content < 20;
-            let no_rain = wont_rain_soon(&db_conn, sensor_id);
+            let no_rain = match wont_rain_soon(&db_conn, sensor_id) {
+                Ok(b) => b,
+                Err(e) => return Err(format!("{}", e)),
+            };
+
+            if too_little_moisture {
+                println!("too little moisure");
+            }
+
+            if no_rain {
+                println!("won't rain soon");
+            } else {
+                println!("it will rain soon");
+            }
+
             let should_water = too_little_moisture && no_rain;
             Ok(should_water)
         }
         Err(e) => {
             println!("error: {}", e);
-            Err(format!("sensor_id: {} does not exist", sensor_id))
+            Err(format!("no records for sensor_id: {}", sensor_id))
         }
     }
 }
 
-//fn fetch_forecast(db_conn: &State<DbConn>) -> Result<Vec<Forecast>, String> {
 #[get("/forecast")]
 fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
     let client = reqwest::Client::new();
