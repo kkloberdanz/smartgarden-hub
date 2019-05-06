@@ -102,6 +102,7 @@ fn wont_rain_soon(
     let now = Local::now();
     let twelve_hr_later = now + Duration::hours(12);
     let now_string = format!("{}", now.format("%Y-%m-%d %H:%M:%S"));
+    println!("now {}", now_string);
     let twelve_hr_later_string =
         format!("{}", twelve_hr_later.format("%Y-%m-%d %H:%M:%S"));
     let sql =
@@ -169,9 +170,9 @@ fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
     };
 
     let sql = "insert into forecast \
-               (country, city, time, weather, description, temp, temp_min, \
+               (timeof_forcast, country, city, time, weather, description, temp, temp_min, \
                temp_max, pressure, humidity) \
-               values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
+               values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
     for event in list {
         let forecast = Forecast {
             country: String::from("US"),
@@ -188,7 +189,10 @@ fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
             pressure: event["main"]["pressure"].as_f64().unwrap(),
             humidity: event["main"]["humidity"].as_f64().unwrap(),
         };
+        let now = Local::now();
+        let now_string = format!("{}", now.format("%Y-%m-%d %H:%M:%S"));
         let params = [
+            &now_string as &ToSql,
             &forecast.country as &ToSql,
             &forecast.city,
             &forecast.time,
@@ -262,10 +266,10 @@ fn rocket() -> Rocket {
 }
 
 fn echo_thread() -> ! {
+    println!("fetch_forecast thread active");
     let conn =
         Connection::open("db.sqlite").expect("failed to open db.sqlite file");
     loop {
-        println!("fetch_forecast thread active");
         thread::sleep(std::time::Duration::from_secs(10800));
         println!("fetching forecast");
         fetch_forecast(&conn);
