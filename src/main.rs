@@ -27,12 +27,12 @@ extern crate reqwest;
 extern crate serde_json;
 
 use chrono::Local;
-use time::Duration;
 use rocket::{Rocket, State};
 use rocket_contrib::json::Json;
 use rusqlite::types::ToSql;
 use rusqlite::Connection;
 use std::sync::Mutex;
+use time::Duration;
 
 type SensorID = i64;
 type DbConn = Mutex<Connection>;
@@ -94,17 +94,21 @@ fn get_latest_garden_record(
         })
 }
 
-fn wont_rain_soon(db_conn: &State<DbConn>, sensor_id: SensorID) -> rusqlite::Result<bool> {
+fn wont_rain_soon(
+    db_conn: &State<DbConn>,
+    sensor_id: SensorID,
+) -> rusqlite::Result<bool> {
     let now = Local::now();
     let twelve_hr_later = now + Duration::hours(12);
     let now_string = format!("{}", now.format("%Y-%m-%d %H:%M:%S"));
-    let twelve_hr_later_string = format!("{}", twelve_hr_later.format("%Y-%m-%d %H:%M:%S"));
-    let sql = "select count(*) from forecast \
-               where timeof_forcast = (select max(timeof_forcast) from forecast) \
-               and time >= ?1 and time <= ?2 and lower(weather) like '%rain%'";
+    let twelve_hr_later_string =
+        format!("{}", twelve_hr_later.format("%Y-%m-%d %H:%M:%S"));
+    let sql =
+        "select count(*) from forecast \
+         where timeof_forcast = (select max(timeof_forcast) from forecast) \
+         and time >= ?1 and time <= ?2 and lower(weather) like '%rain%'";
 
-    let params = [&now_string as &ToSql,
-                  &twelve_hr_later_string];
+    let params = [&now_string as &ToSql, &twelve_hr_later_string];
     db_conn
         .lock()
         .expect("db read lock")
