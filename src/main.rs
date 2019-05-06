@@ -32,8 +32,8 @@ use rocket_contrib::json::Json;
 use rusqlite::types::ToSql;
 use rusqlite::Connection;
 use std::sync::Mutex;
-use time::Duration;
 use std::thread;
+use time::Duration;
 
 type SensorID = i64;
 type DbConn = Mutex<Connection>;
@@ -200,9 +200,7 @@ fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
             &forecast.pressure,
             &forecast.humidity,
         ];
-        db_conn
-            .execute(&sql, &params)
-            .unwrap();
+        db_conn.execute(&sql, &params).unwrap();
         println!("{:?}", forecast);
     }
 
@@ -275,6 +273,6 @@ fn echo_thread() -> ! {
 }
 
 fn main() {
-    thread::spawn(move || {echo_thread()});
+    thread::spawn(move || echo_thread());
     rocket().launch();
 }
