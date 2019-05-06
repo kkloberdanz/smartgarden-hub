@@ -33,6 +33,7 @@ use rusqlite::types::ToSql;
 use rusqlite::Connection;
 use std::sync::Mutex;
 use time::Duration;
+use std::thread;
 
 type SensorID = i64;
 type DbConn = Mutex<Connection>;
@@ -151,8 +152,7 @@ fn should_water(
     }
 }
 
-#[get("/forecast")]
-fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
+fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
     let client = reqwest::Client::new();
     let url = "https://api.openweathermap.org\
                /data/2.5/forecast?q=Urbandale,US";
@@ -201,8 +201,6 @@ fn fetch_forecast(db_conn: State<DbConn>) -> Result<String, String> {
             &forecast.humidity,
         ];
         db_conn
-            .lock()
-            .expect("db conn lock inserting forecast")
             .execute(&sql, &params)
             .unwrap();
         println!("{:?}", forecast);
@@ -262,9 +260,21 @@ fn rocket() -> Rocket {
 
     rocket::ignite()
         .manage(Mutex::new(conn))
-        .mount("/", routes![hello, log, can_i_water, fetch_forecast])
+        .mount("/", routes![hello, log, can_i_water])
+}
+
+fn echo_thread() -> ! {
+    let conn =
+        Connection::open("db.sqlite").expect("failed to open db.sqlite file");
+    loop {
+        println!("fetch_forecast thread active");
+        thread::sleep(std::time::Duration::from_secs(10800));
+        println!("fetching forecast");
+        fetch_forecast(&conn);
+    }
 }
 
 fn main() {
+    thread::spawn(move || {echo_thread()});
     rocket().launch();
 }
