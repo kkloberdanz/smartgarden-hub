@@ -170,7 +170,8 @@ fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
     };
 
     let sql = "insert into forecast \
-               (timeof_forcast, country, city, time, weather, description, temp, temp_min, \
+               (timeof_forcast, country, city, time, weather, \
+               description, temp, temp_min, \
                temp_max, pressure, humidity) \
                values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)";
     for event in list {
