@@ -38,6 +38,12 @@ use time::Duration;
 type SensorID = i64;
 type DbConn = Mutex<Connection>;
 
+enum MoistureLevel {
+    Plenty,
+    Low,
+    Critical,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct GardenData {
     sensor_id: SensorID,
@@ -120,6 +126,45 @@ fn wont_rain_soon(
         })
 }
 
+fn describe_moisture(garden_record: &GardenData) -> MoistureLevel {
+    if garden_record.moisture_content > 25 {
+        MoistureLevel::Plenty
+    } else if garden_record.moisture_content > 10 {
+        MoistureLevel::Low
+    } else {
+        MoistureLevel::Critical
+    }
+}
+
+fn check_water(db_conn: &State<DbConn>, garden_record: &GardenData) -> Result<bool, String> {
+    let moisture_level = describe_moisture(&garden_record);
+    let sensor_id = garden_record.sensor_id;
+    match moisture_level {
+        MoistureLevel::Plenty => {
+            println!("plenty of water");
+            Ok(false)
+        },
+        MoistureLevel::Low => {
+            println!("low water");
+            match wont_rain_soon(&db_conn, sensor_id) {
+                Ok(no_rain) => {
+                    if no_rain {
+                        println!("won't rain soon");
+                    } else {
+                        println!("but it will rain soon");
+                    }
+                    Ok(no_rain)
+                },
+                Err(e) => return Err(format!("{}", e)),
+            }
+        },
+        MoistureLevel::Critical => {
+            println!("moisture level critical");
+            Ok(true)
+        },
+    }
+}
+
 fn should_water(
     db_conn: &State<DbConn>,
     sensor_id: SensorID,
@@ -127,24 +172,7 @@ fn should_water(
     let garden_record = get_latest_garden_record(&db_conn, sensor_id);
     match garden_record {
         Ok(v) => {
-            let too_little_moisture = v.moisture_content < 20;
-            let no_rain = match wont_rain_soon(&db_conn, sensor_id) {
-                Ok(b) => b,
-                Err(e) => return Err(format!("{}", e)),
-            };
-
-            if too_little_moisture {
-                println!("too little moisure");
-            }
-
-            if no_rain {
-                println!("won't rain soon");
-            } else {
-                println!("it will rain soon");
-            }
-
-            let should_water = too_little_moisture && no_rain;
-            Ok(should_water)
+            check_water(&db_conn, &v)
         }
         Err(e) => {
             println!("error: {}", e);
@@ -153,7 +181,7 @@ fn should_water(
     }
 }
 
-fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
+fn fetch_forecast(db_conn: &Connection) {
     let client = reqwest::Client::new();
     let url = "https://api.openweathermap.org\
                /data/2.5/forecast?q=Urbandale,US";
@@ -208,8 +236,6 @@ fn fetch_forecast(db_conn: &Connection) -> Result<String, String> {
         db_conn.execute(&sql, &params).unwrap();
         println!("{:?}", forecast);
     }
-
-    Ok(format!("{:?}\n", "foobar"))
 }
 
 #[get("/can-i-water/<sensor_id>")]
