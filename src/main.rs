@@ -136,14 +136,17 @@ fn describe_moisture(garden_record: &GardenData) -> MoistureLevel {
     }
 }
 
-fn check_water(db_conn: &State<DbConn>, garden_record: &GardenData) -> Result<bool, String> {
+fn check_water(
+    db_conn: &State<DbConn>,
+    garden_record: &GardenData,
+) -> Result<bool, String> {
     let moisture_level = describe_moisture(&garden_record);
     let sensor_id = garden_record.sensor_id;
     match moisture_level {
         MoistureLevel::Plenty => {
             println!("plenty of water");
             Ok(false)
-        },
+        }
         MoistureLevel::Low => {
             println!("low water");
             match wont_rain_soon(&db_conn, sensor_id) {
@@ -154,14 +157,14 @@ fn check_water(db_conn: &State<DbConn>, garden_record: &GardenData) -> Result<bo
                         println!("but it will rain soon");
                     }
                     Ok(no_rain)
-                },
+                }
                 Err(e) => return Err(format!("{}", e)),
             }
-        },
+        }
         MoistureLevel::Critical => {
             println!("moisture level critical");
             Ok(true)
-        },
+        }
     }
 }
 
@@ -171,9 +174,7 @@ fn should_water(
 ) -> Result<bool, String> {
     let garden_record = get_latest_garden_record(&db_conn, sensor_id);
     match garden_record {
-        Ok(v) => {
-            check_water(&db_conn, &v)
-        }
+        Ok(v) => check_water(&db_conn, &v),
         Err(e) => {
             println!("error: {}", e);
             Err(format!("no records for sensor_id: {}", sensor_id))
