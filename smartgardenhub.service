@@ -1,0 +1,15 @@
+[Unit]
+Description=SmartGarden Hub
+After=network.target
+
+[Service]
+Type=simple
+# Another Type option: forking
+User=rock64
+WorkingDirectory=/mnt/hdd/Source/smartgarden-hub
+ExecStart=/mnt/hdd/Source/smartgarden-hub/start.sh
+Restart=always
+# Other Restart options: or always, on-abort, etc
+
+[Install]
+WantedBy=multi-user.target

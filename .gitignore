@@ -1,6 +1,5 @@
 /target
 **/*.rs.bk
-*.sqlite
 *.swo
 *.swp
 .*.swp
