@@ -295,7 +295,7 @@ fn rocket() -> Rocket {
         .mount("/", routes![hello, log, can_i_water])
 }
 
-fn echo_thread() -> ! {
+fn forecast_thread() -> ! {
     println!("fetch_forecast thread active");
     let conn =
         Connection::open("db.sqlite").expect("failed to open db.sqlite file");
@@ -307,6 +307,6 @@ fn echo_thread() -> ! {
 }
 
 fn main() {
-    thread::spawn(move || echo_thread());
+    thread::spawn(move || forecast_thread());
     rocket().launch();
 }
