@@ -114,9 +114,11 @@ fn wont_rain_soon(
     let sql =
         "select count(*) from forecast \
          where timeof_forcast = (select max(timeof_forcast) from forecast) \
-         and time >= ?1 and time <= ?2 and lower(weather) like '%rain%'";
+         and time >= ?1 and time <= ?2 and lower(weather) like '%rain%' \
+         and city = (select city from sensor_meta where sensor_id = ?3) \
+         and country = (select country from sensor_meta where sensor_id = ?3)";
 
-    let params = [&now_string as &ToSql, &twelve_hr_later_string];
+    let params = [&now_string as &ToSql, &twelve_hr_later_string, &sensor_id];
     db_conn
         .lock()
         .expect("db read lock")
@@ -144,17 +146,17 @@ fn check_water(
     let sensor_id = garden_record.sensor_id;
     match moisture_level {
         MoistureLevel::Plenty => {
-            println!("plenty of water");
+            println!("{} plenty of water", sensor_id);
             Ok(false)
         }
         MoistureLevel::Low => {
-            println!("low water");
+            println!("{} low water", sensor_id);
             match wont_rain_soon(&db_conn, sensor_id) {
                 Ok(no_rain) => {
                     if no_rain {
-                        println!("won't rain soon");
+                        println!("{} won't rain soon", sensor_id);
                     } else {
-                        println!("but it will rain soon");
+                        println!("{} but it will rain soon", sensor_id);
                     }
                     Ok(no_rain)
                 }
@@ -162,7 +164,7 @@ fn check_water(
             }
         }
         MoistureLevel::Critical => {
-            println!("moisture level critical");
+            println!("{} moisture level critical", sensor_id);
             Ok(true)
         }
     }
